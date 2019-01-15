@@ -12,14 +12,13 @@ import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.util.Map;
 
-import static com.company.PortForwarder.connectionsDns;
-import static com.company.PortForwarder.dnsChannel;
+import static com.company.PortForwarder.*;
 
 public class StartMessageMenager {
     private static byte version = 0x05;
    // private Map<Integer, Attachment> dns;
 
-    public void headersMessage(Attachment attachment, int byteRead, Selector selector) throws IOException {
+    public void headersMessage(SelectionKey key,Attachment attachment, int byteRead, Selector selector) throws IOException {
         byte[] array = attachment.getBuf().array();
         if(checkRequestIPV4(array)){
             InetAddress host = getAddress(array);
@@ -35,17 +34,18 @@ public class StartMessageMenager {
             for(i = 5; i < 5+length; i++){
                 domain.append((char) array[i]);
             }
+           // domain.append('.');
             int port = (((0xFF & array[i]) << 8) + (0xFF & array[i+1]));
             attachment.setPort(port);
             Name name = org.xbill.DNS.Name.fromString(domain.toString(), Name.root);
             Record rec = Record.newRecord(name, Type.A, DClass.IN);
             Message msg = Message.newQuery(rec);
-            dnsChannel.write(ByteBuffer.wrap(msg.toWire()));
-            connectionsDns.put(msg.getHeader().getID(), attachment);
+            DNSChannel.write(ByteBuffer.wrap(msg.toWire()));
+            DNSMap.put(msg.getHeader().getID(), key);
         }
     }
 
-    private void OkAnswerClient(Attachment attachment, InetAddress host, byte port) throws IOException {
+    public void OkAnswerClient(Attachment attachment, InetAddress host, byte port) throws IOException {
         byte[] answer = {version,
                 ExceptionType.success,
                 0x00,
