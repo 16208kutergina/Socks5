@@ -40,24 +40,19 @@ class PortForwarder {
                 SelectionKey key = iter.next();
                 if(DNSKey == key) {
                     if (key.isReadable()) {
-                        System.out.println("dns");
                         resolveDns();
                     }
                     }else {
                     if (key.isValid() && key.isAcceptable()) {
-                        System.out.println("accept");
                         accept(key);
                     }
                     if (key.isValid() && key.isConnectable()) {
-                        System.out.println("connect");
                         connect(key);
                     }
                     if (key.isValid() && key.isReadable()) {
-                        System.out.println("read");
                         read(key);
                     }
                     if (key.isValid() && key.isWritable()) {
-                        System.out.println("write");
                         write(key);
                     }
                 }
@@ -125,7 +120,6 @@ class PortForwarder {
         Attachment attachment = (Attachment) key.attachment();
         try {
             int byteRead = attachment.getSocketChannel().read(attachment.getBuf());
-            System.out.println(new String(attachment.getBuf().array()));
             if (attachment.getOtherAttachment() == null) {
                 if(attachment.isFirstMessage()){
                     startMessageMenager.greetingMessage(attachment);

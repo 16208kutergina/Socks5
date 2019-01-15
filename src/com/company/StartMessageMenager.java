@@ -98,7 +98,6 @@ class StartMessageMenager {
     private InetAddress getAddress(byte[] buf) throws UnknownHostException {
         if (buf[3] == AddressType.IPv4) {
             byte[] addr = new byte[]{buf[4], buf[5], buf[6], buf[7]};
-            System.out.println(InetAddress.getByAddress(addr));
             return InetAddress.getByAddress(addr);
         }
         return null;
