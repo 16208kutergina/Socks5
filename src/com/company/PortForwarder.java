@@ -6,9 +6,7 @@ import org.xbill.DNS.Record;
 import org.xbill.DNS.ResolverConfig;
 
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.util.*;
@@ -16,9 +14,9 @@ import java.util.*;
 class PortForwarder {
     private StartMessageMenager startMessageMenager = new StartMessageMenager();
     private Selector selector = null;
-   static DatagramChannel DNSChannel;
-   static HashMap<Integer, SelectionKey> DNSMap = new HashMap<>();
-     String DNSServer = ResolverConfig.getCurrentConfig().server();
+   static DatagramChannel dnsChannel;
+   static HashMap<Integer, SelectionKey> dnsMap = new HashMap<>();
+    private String dnsServer = ResolverConfig.getCurrentConfig().server();
 
     void start(int port) throws IOException {
         selector = Selector.open();
@@ -29,10 +27,10 @@ class PortForwarder {
         serverSocket.configureBlocking(false);
         serverSocket.register(selector, SelectionKey.OP_ACCEPT);
 
-        DNSChannel = DatagramChannel.open();
-        DNSChannel.configureBlocking(false);
-        DNSChannel.connect(new InetSocketAddress(DNSServer, 53));
-        SelectionKey DNSKey = DNSChannel.register(selector, SelectionKey.OP_READ);
+        dnsChannel = DatagramChannel.open();
+        dnsChannel.configureBlocking(false);
+        dnsChannel.connect(new InetSocketAddress(dnsServer, 53));
+        SelectionKey DNSKey = dnsChannel.register(selector, SelectionKey.OP_READ);
 
         while (true) {
             selector.select();
@@ -71,7 +69,7 @@ class PortForwarder {
 
     private void resolveDns() throws IOException {
         ByteBuffer buf = ByteBuffer.allocate(1024);
-        if (DNSChannel.read(buf) <= 0)
+        if (dnsChannel.read(buf) <= 0)
             return;
         Message message = new Message(buf.array());
         Record[] records = message.getSectionArray(1);
@@ -79,47 +77,24 @@ class PortForwarder {
             if (record instanceof ARecord) {
                 ARecord aRecord = (ARecord) record;
                 int id = message.getHeader().getID();
-                SelectionKey key = DNSMap.get(id);
+                SelectionKey key = dnsMap.get(id);
                 if (key == null)
                     continue;
                 Attachment attachment = (Attachment) key.attachment();
                 attachment.setHost(aRecord.getAddress());
-                System.out.println("dns resolved : " + aRecord.getAddress() + " " + attachment.getPort());
                startMessageMenager.connectHost(attachment, attachment.getHost(), attachment.getPort(),selector);
                startMessageMenager.OkAnswerClient(attachment,attachment.getHost(), (byte) attachment.getPort());
-               // createPeer(key);
                 return;
             }
         }
     }
-
-    private void createPeer(SelectionKey key) throws IOException {
-        try {
-            Attachment attachment = (Attachment) key.attachment();
-            SocketChannel peer = SocketChannel.open();
-            peer.configureBlocking(false);
-            peer.connect(new InetSocketAddress(attachment.getHost(), attachment.getPort()));
-            SelectionKey peerKey = peer.register(key.selector(), SelectionKey.OP_CONNECT);
-            if (!key.isValid())
-                return;
-            key.interestOps(0);
-            attachment.setOtherAttachment((Attachment) peerKey.attachment());
-            Attachment peerAttachment = new Attachment(peer,selector,"host");
-            peerAttachment.setOtherAttachment((Attachment) key.attachment());
-            peerKey.attach(peerAttachment);
-        } catch (IOException e) {
-            System.out.println("could not create peer");
-            ((Attachment)key.attachment()).close();
-        }
-    }
-
 
     private void accept(SelectionKey key){
         SocketChannel clientChannel = null;
         try {
             clientChannel = ((ServerSocketChannel)key.channel()).accept();
             clientChannel.configureBlocking(false);
-            Attachment client = new Attachment(clientChannel, selector, "Client");
+            Attachment client = new Attachment(clientChannel, selector);
             clientChannel.register(selector,SelectionKey.OP_READ, client);
         } catch (IOException e) {
             e.printStackTrace();
@@ -150,7 +125,6 @@ class PortForwarder {
         Attachment attachment = (Attachment) key.attachment();
         try {
             int byteRead = attachment.getSocketChannel().read(attachment.getBuf());
-            //System.out.println(Arrays.toString(attachment.getBuf().array()));
             System.out.println(new String(attachment.getBuf().array()));
             if (attachment.getOtherAttachment() == null) {
                 if(attachment.isFirstMessage()){

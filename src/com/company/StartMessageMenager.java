@@ -10,15 +10,13 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
-import java.util.Map;
 
 import static com.company.PortForwarder.*;
 
-public class StartMessageMenager {
+class StartMessageMenager {
     private static byte version = 0x05;
-   // private Map<Integer, Attachment> dns;
 
-    public void headersMessage(SelectionKey key,Attachment attachment, int byteRead, Selector selector) throws IOException {
+    void headersMessage(SelectionKey key, Attachment attachment, int byteRead, Selector selector) throws IOException {
         byte[] array = attachment.getBuf().array();
         if(checkRequestIPV4(array)){
             InetAddress host = getAddress(array);
@@ -34,20 +32,19 @@ public class StartMessageMenager {
             for(i = 5; i < 5+length; i++){
                 domain.append((char) array[i]);
             }
-           // domain.append('.');
             int port = (((0xFF & array[i]) << 8) + (0xFF & array[i+1]));
             attachment.setPort(port);
             Name name = org.xbill.DNS.Name.fromString(domain.toString(), Name.root);
             Record rec = Record.newRecord(name, Type.A, DClass.IN);
             Message msg = Message.newQuery(rec);
-            DNSChannel.write(ByteBuffer.wrap(msg.toWire()));
-            DNSMap.put(msg.getHeader().getID(), key);
+            dnsChannel.write(ByteBuffer.wrap(msg.toWire()));
+            dnsMap.put(msg.getHeader().getID(), key);
         }
     }
 
-    public void OkAnswerClient(Attachment attachment, InetAddress host, byte port) throws IOException {
+    void OkAnswerClient(Attachment attachment, InetAddress host, byte port) throws IOException {
         byte[] answer = {version,
-                ExceptionType.success,
+                StatusType.success,
                 0x00,
                 AddressType.IPv4,
                 host.getAddress()[0],
@@ -58,15 +55,14 @@ public class StartMessageMenager {
                 port};
         attachment.getSocketChannel().write(ByteBuffer.wrap(answer));
         attachment.getBuf().clear();
-      //  attachment.getOtherAttachment().addOpcion(SelectionKey.OP_WRITE);
     }
 
-    public void connectHost(Attachment attachment, InetAddress host, int port, Selector selector) throws IOException {
+    void connectHost(Attachment attachment, InetAddress host, int port, Selector selector) throws IOException {
         SocketChannel newHostChannel;
         newHostChannel = SocketChannel.open();
         newHostChannel.configureBlocking(false);
         newHostChannel.connect(new InetSocketAddress(host,port));
-        Attachment newHost = new Attachment(newHostChannel,selector,"host");
+        Attachment newHost = new Attachment(newHostChannel,selector);
         attachment.setOtherAttachment(newHost);
         newHost.setOtherAttachment(attachment);
         attachment.getBuf().clear();
@@ -74,7 +70,7 @@ public class StartMessageMenager {
         newHostChannel.register(selector, SelectionKey.OP_CONNECT | SelectionKey.OP_READ, newHost);
     }
 
-    public void greetingMessage(Attachment attachment) throws IOException {
+    void greetingMessage(Attachment attachment) throws IOException {
         if(checkGreeting(attachment.getBuf().array())){
             byte[] answer = {version, AuthenticationType.noAuthenticationRequired};
             attachment.getSocketChannel().write(ByteBuffer.wrap(answer));
@@ -108,8 +104,7 @@ public class StartMessageMenager {
         return null;
     }
 
-    public int getPort(byte[] buf, int lenBuf){
-        // System.out.println(dest_port);
+    private int getPort(byte[] buf, int lenBuf){
         return (((0xFF & buf[lenBuf-2]) << 8) + (0xFF & buf[lenBuf-1]));
     }
 

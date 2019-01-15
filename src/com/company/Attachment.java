@@ -39,15 +39,6 @@ class Attachment {
         this.finishWrite = outputShutdown;
     }
 
-    private Selector selector;
-    private Attachment otherAttachment;
-    private int bufferSize = 4096;
-    private ByteBuffer buf = ByteBuffer.allocate(bufferSize);
-    private SocketChannel socketChannel;
-    private boolean firstMessage = true;
-    public String whoIam;
-    private int port;
-
     public InetAddress getHost() {
         return host;
     }
@@ -56,8 +47,8 @@ class Attachment {
         this.host = host;
     }
 
-    private InetAddress host;
 
+    private InetAddress host;
 
     public boolean isFirstMessage() {
         return firstMessage;
@@ -73,13 +64,9 @@ class Attachment {
         return finishWrite;
     }
 
-    private boolean finishWrite = false;
-private boolean isFinishRead = false;
-
-    Attachment(SocketChannel socketChannel, Selector selector, String whoIam){
+    Attachment(SocketChannel socketChannel, Selector selector){
         this.socketChannel = socketChannel;
         this.selector = selector;
-        this.whoIam = whoIam;
     }
 
 
@@ -103,13 +90,24 @@ private boolean isFinishRead = false;
     }
 
 
-    public int getPort() {
+    int getPort() {
         return port;
     }
 
-    public void setPort(int port) {
+    void setPort(int port) {
         this.port = port;
     }
+
+    private Selector selector;
+    private Attachment otherAttachment;
+    private int bufferSize = 4096;
+    private ByteBuffer buf = ByteBuffer.allocate(bufferSize);
+    private SocketChannel socketChannel;
+    private boolean firstMessage = true;
+    private int port;
+
+    private boolean finishWrite = false;
+    private boolean isFinishRead = false;
 }
 
 
