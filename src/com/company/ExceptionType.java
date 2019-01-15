@@ -2,7 +2,7 @@ package com.company;
 
 public class ExceptionType {
     public static byte success = 0x00;
-    public static byte exceptionSocksServer = 0x01;
+    final public static byte exceptionSocksServer = 0x01;
     public static byte connectionBanned = 0x02;
     public static byte networkNotAvailable = 0x03;
     public static byte hostNotAvailable = 0x04;

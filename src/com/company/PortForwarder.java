@@ -1,18 +1,24 @@
 package com.company;
 
+import org.xbill.DNS.ARecord;
+import org.xbill.DNS.Message;
+import org.xbill.DNS.Record;
+import org.xbill.DNS.ResolverConfig;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.Set;
+import java.util.*;
 
 class PortForwarder {
     private StartMessageMenager startMessageMenager = new StartMessageMenager();
     private Selector selector = null;
+    static DatagramChannel dnsChannel;
+    private SelectionKey dnsKey;
+    static HashMap<Integer, Attachment> connectionsDns = new HashMap<>();
 
     void start(int port) throws IOException {
         selector = Selector.open();
@@ -22,29 +28,48 @@ class PortForwarder {
         serverSocket.bind(new InetSocketAddress(port));
         serverSocket.configureBlocking(false);
         serverSocket.register(selector, SelectionKey.OP_ACCEPT);
+
+        String[] dnsServers = ResolverConfig.getCurrentConfig().servers();
+        dnsChannel = DatagramChannel.open();
+        dnsChannel.configureBlocking(false);
+        //System.out.println(dnsServers.length);
+        for (String server : dnsServers) {
+            System.out.println(server);
+        }
+        if (dnsServers.length > 2) {
+            dnsChannel.connect(new InetSocketAddress(dnsServers[2], 53));
+        } else {
+            dnsChannel.connect(new InetSocketAddress("8.8.8.8", 53));
+        }
+        dnsKey = dnsChannel.register(selector, SelectionKey.OP_READ);
         while (true) {
             selector.select();
             Set<SelectionKey> selectedKeys = selector.selectedKeys();
             Iterator<SelectionKey> iter = selectedKeys.iterator();
             while (iter.hasNext()) {
-
                 SelectionKey key = iter.next();
-                Attachment attachment = (Attachment) key.attachment();
-                if (key.isValid() && key.isAcceptable()) {
-                    System.out.println("accept");
-                    accept(key);
-                }
-                if (key.isValid() && key.isConnectable()) {
-                    System.out.println("connect");
-                    connect(key);
-                }
-                if (key.isValid() && key.isReadable()) {
-                    System.out.println("read");
-                    read(key);
-                }
-                if (key.isValid() && key.isWritable()) {
-                    System.out.println("write");
-                    write(key);
+                if(dnsKey == key) {
+                    if (key.isReadable()) {
+                        System.out.println("dns");
+                        resolvedDns();
+                    }
+                    }else {
+                    if (key.isValid() && key.isAcceptable()) {
+                        System.out.println("accept");
+                        accept(key);
+                    }
+                    if (key.isValid() && key.isConnectable()) {
+                        System.out.println("connect");
+                        connect(key);
+                    }
+                    if (key.isValid() && key.isReadable()) {
+                        System.out.println("read");
+                        read(key);
+                    }
+                    if (key.isValid() && key.isWritable()) {
+                        System.out.println("write");
+                        write(key);
+                    }
                 }
                 iter.remove();
             }
@@ -52,28 +77,37 @@ class PortForwarder {
         }
     }
 
+    private void resolvedDns() throws IOException {
+        ByteBuffer buffer = ByteBuffer.allocate(1024);
+        int len = dnsChannel.read(buffer);
+        if (len <= 0) return;
+        Message msg = new Message(buffer.array());
+        Record[] recs = msg.getSectionArray(1);
+        for (Record rec : recs) {
+            if (rec instanceof ARecord) {
+                ARecord aRecord= (ARecord) rec;
+                int id = msg.getHeader().getID();
+                Attachment attachment = connectionsDns.get(id);
+                if (attachment == null) continue;
+                InetAddress adr = aRecord.getAddress();
+                startMessageMenager.connectHost(attachment,adr, attachment.getPort(),selector);
+            }
+        }
+    }
+
     private void accept(SelectionKey key){
         SocketChannel clientChannel = null;
-        // SocketChannel newHostChannel = null;
         try {
             clientChannel = ((ServerSocketChannel)key.channel()).accept();
             clientChannel.configureBlocking(false);
-            // newHostChannel = SocketChannel.open();
-            // newHostChannel.configureBlocking(false);
-            // newHostChannel.connect(new InetSocketAddress(rhost,rport));
-            Attachment client = new Attachment(clientChannel, selector);
-            // Attachment newHost = new Attachment(newHostChannel,selector);
-            //  client.setOtherAttachment(newHost);
-            //  newHost.setOtherAttachment(client);
-            //  newHostChannel.register(selector, SelectionKey.OP_CONNECT, newHost);
+            Attachment client = new Attachment(clientChannel, selector, "Client");
             clientChannel.register(selector,SelectionKey.OP_READ, client);
         } catch (IOException e) {
             e.printStackTrace();
             try {
                 assert clientChannel != null;
                 clientChannel.close();
-                //  assert newHostChannel != null;
-                //    newHostChannel.close();
+                dnsChannel.close();
             } catch (IOException e1) {
                 e1.printStackTrace();
             }
@@ -83,15 +117,11 @@ class PortForwarder {
     private void connect(SelectionKey key){
         SocketChannel channel = ((SocketChannel) key.channel());
         Attachment attachment = ((Attachment) key.attachment());
+        attachment.deleteOpcion(SelectionKey.OP_CONNECT);
         try {
             channel.finishConnect();
-//
-            attachment.deleteOption(SelectionKey.OP_CONNECT);
-            attachment.addOption(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
-         attachment.getOtherAttachment().addOption(SelectionKey.OP_READ  );
-            //System.out.println(attachment.whoIam+" :\n" + "Accept " + key.isAcceptable()+"\n Connect " + key.isConnectable()+"\nRead " + key.isReadable() + "\nWrite " + key.isWritable()+"\n");
-          //  System.out.println(attachment.getOtherAttachment().whoIam+":\n" + "Accept " + key.isAcceptable()+"\n Connect " + key.isConnectable()+"\nRead " + key.isReadable() + "\nWrite " + key.isWritable()+"\n");
-
+            attachment.addOpcion(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+            attachment.getOtherAttachment().addOpcion(SelectionKey.OP_READ  );
         } catch (IOException e) {
             e.printStackTrace();
             attachment.close();
@@ -102,9 +132,8 @@ class PortForwarder {
         Attachment attachment = (Attachment) key.attachment();
         try {
             int byteRead = attachment.getSocketChannel().read(attachment.getBuf());
-            //System.out.println(attachment.whoIam +" read :\n"+ Arrays.toString(attachment.getBuf().array()));
-            //System.out.println(attachment.whoIam+" read:\n" + "Accept " + key.isAcceptable()+"\n Connect " + key.isConnectable()+"\nRead " + key.isReadable() + "\nWrite " + key.isWritable()+"\n");
-             //System.out.println(attachment.whoIam +": "+Arrays.toString(attachment.getBuf().array()));
+            //System.out.println(Arrays.toString(attachment.getBuf().array()));
+            System.out.println(new String(attachment.getBuf().array()));
             if (attachment.getOtherAttachment() == null) {
                 if(attachment.isFirstMessage()){
                     startMessageMenager.greetingMessage(attachment);
@@ -112,11 +141,21 @@ class PortForwarder {
                     startMessageMenager.headersMessage(attachment, byteRead, selector);
                 }
             } else {
-               // int byteRead = attachment.getSocketChannel().read(attachment.getBuf());
-                if (byteRead > 0) {
-                    attachment.getOtherAttachment().addOption(SelectionKey.OP_WRITE);
-                } else if (byteRead == -1) {
-                    attachment.deleteOption(SelectionKey.OP_READ);
+                Attachment otherAttachment = attachment.getOtherAttachment();
+                if (byteRead > 0 && otherAttachment.getSocketChannel().isConnected()) {
+                    otherAttachment.addOpcion(SelectionKey.OP_WRITE);
+                }
+                if (byteRead == -1) {
+                    attachment.deleteOpcion(SelectionKey.OP_READ);
+                    attachment.setFinishRead(true);
+                    if (attachment.getBuf().position() == 0) {
+                        otherAttachment.getSocketChannel().shutdownOutput();
+                        otherAttachment.setFinishWrite(true);
+                        if (attachment.isFinishWrite() || otherAttachment.getBuf().position() == 0) {
+                            attachment.close();
+                            otherAttachment.close();
+                        }
+                    }
                 }
             }
         }catch (IOException e) {
@@ -128,15 +167,24 @@ class PortForwarder {
 
     private void write(SelectionKey key){
         Attachment attachment = (Attachment) key.attachment();
-        attachment.getOtherAttachment().getBuf().flip();
+        Attachment otherAttachment = attachment.getOtherAttachment();
+        otherAttachment.getBuf().flip();
         try {
-            int byteWrite = attachment.getSocketChannel().write(attachment.getOtherAttachment().getBuf());
-            if (byteWrite > 0) {
-                attachment.getOtherAttachment().getBuf().compact();
-                attachment.getOtherAttachment().addOption(SelectionKey.OP_READ);
+            int byteWrite = attachment.getSocketChannel().write(otherAttachment.getBuf());
+            if (byteWrite > 0 ){
+                otherAttachment.getBuf().compact();
+                otherAttachment.addOpcion(SelectionKey.OP_READ);
             }
-            if (attachment.getOtherAttachment().getBuf().position() == 0) {
-                attachment.deleteOption(SelectionKey.OP_WRITE);
+            if(otherAttachment.getBuf().position() == 0){
+                attachment.deleteOpcion(SelectionKey.OP_WRITE);
+                if (otherAttachment.isFinishRead()) {
+                    attachment.getSocketChannel().shutdownOutput();
+                    attachment.setFinishWrite(true);
+                    if (otherAttachment.isFinishWrite()) {
+                        attachment.close();
+                        otherAttachment.close();
+                    }
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
