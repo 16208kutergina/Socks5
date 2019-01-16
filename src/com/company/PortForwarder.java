@@ -144,7 +144,6 @@ class PortForwarder {
                 }
             }
         }catch (IOException e) {
-            e.printStackTrace();
             attachment.close();
         }
 
