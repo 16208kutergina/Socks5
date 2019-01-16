@@ -132,7 +132,6 @@ class PortForwarder {
                 }
                 if (attachment.getBuf().position() == 0) {
                     attachment.deleteOpcion(SelectionKey.OP_READ);
-                    otherAttachment.getSocketChannel().shutdownOutput();
                     otherAttachment.setFinishWrite(true);
                     if (attachment.isFinishWrite() || otherAttachment.getBuf().position() == 0) {
                         attachment.close();
