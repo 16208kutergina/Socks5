@@ -13,7 +13,7 @@ import java.nio.channels.SocketChannel;
 
 import static com.company.PortForwarder.*;
 
-class StartMessageMenager {
+class StartMessageManager {
     private static byte version = 0x05;
 
     void headersMessage(SelectionKey key, Attachment attachment, int byteRead, Selector selector) throws IOException {

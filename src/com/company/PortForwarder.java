@@ -12,7 +12,7 @@ import java.nio.channels.*;
 import java.util.*;
 
 class PortForwarder {
-    private StartMessageMenager startMessageMenager = new StartMessageMenager();
+    private StartMessageManager startMessageManager = new StartMessageManager();
     private Selector selector = null;
    static DatagramChannel dnsChannel;
    static HashMap<Integer, SelectionKey> dnsMap = new HashMap<>();
@@ -77,8 +77,8 @@ class PortForwarder {
                     continue;
                 Attachment attachment = (Attachment) key.attachment();
                 attachment.setHost(aRecord.getAddress());
-               startMessageMenager.connectHost(attachment, attachment.getHost(), attachment.getPort(),selector);
-               startMessageMenager.OkAnswerClient(attachment,attachment.getHost(), (byte) attachment.getPort());
+               startMessageManager.connectHost(attachment, attachment.getHost(), attachment.getPort(),selector);
+               startMessageManager.OkAnswerClient(attachment,attachment.getHost(), (byte) attachment.getPort());
                 return;
             }
         }
@@ -121,9 +121,9 @@ class PortForwarder {
             int byteRead = attachment.getSocketChannel().read(attachment.getBuf());
             if (attachment.getOtherAttachment() == null) {
                 if(attachment.isFirstMessage()){
-                    startMessageMenager.greetingMessage(attachment);
+                    startMessageManager.greetingMessage(attachment);
                 }else{
-                    startMessageMenager.headersMessage(key,attachment, byteRead, selector);
+                    startMessageManager.headersMessage(key,attachment, byteRead, selector);
                 }
             } else {
                 Attachment otherAttachment = attachment.getOtherAttachment();
