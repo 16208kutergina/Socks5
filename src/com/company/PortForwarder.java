@@ -105,11 +105,10 @@ class PortForwarder {
     private void connect(SelectionKey key){
         SocketChannel channel = ((SocketChannel) key.channel());
         Attachment attachment = ((Attachment) key.attachment());
-        attachment.deleteOpcion(SelectionKey.OP_CONNECT);
         try {
             channel.finishConnect();
-            attachment.addOpcion(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
-            attachment.getOtherAttachment().addOpcion(SelectionKey.OP_READ  );
+            attachment.deleteOpcion(SelectionKey.OP_CONNECT);
+            attachment.addOpcion(SelectionKey.OP_WRITE);
         } catch (IOException e) {
             e.printStackTrace();
             attachment.close();
@@ -131,17 +130,17 @@ class PortForwarder {
                 if (byteRead > 0 && otherAttachment.getSocketChannel().isConnected()) {
                     otherAttachment.addOpcion(SelectionKey.OP_WRITE);
                 }
-                if (byteRead == -1) {
+                if (attachment.getBuf().position() == 0) {
                     attachment.deleteOpcion(SelectionKey.OP_READ);
-                    attachment.setFinishRead(true);
-                    if (attachment.getBuf().position() == 0) {
-                        otherAttachment.getSocketChannel().shutdownOutput();
-                        otherAttachment.setFinishWrite(true);
-                        if (attachment.isFinishWrite() || otherAttachment.getBuf().position() == 0) {
-                            attachment.close();
-                            otherAttachment.close();
-                        }
+                    otherAttachment.getSocketChannel().shutdownOutput();
+                    otherAttachment.setFinishWrite(true);
+                    if (attachment.isFinishWrite() || otherAttachment.getBuf().position() == 0) {
+                        attachment.close();
+                        otherAttachment.close();
                     }
+                }
+                if (byteRead == -1) {
+                    attachment.setFinishRead(true);
                 }
             }
         }catch (IOException e) {
